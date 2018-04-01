@@ -7,14 +7,13 @@
 #endif
 
 #define SUCCESS 0
-#define FAILURE -1
+#define FAILURE (-1)
 
 #define RSV_BUF_LEN         (1024 * 1024)
 #define psrc		    ((char *)pbuf)
 #define pdest               (((char *)pbuf)+RSV_BUF_LEN/2)
 extern void *pbuf;
-
-
+extern int mem_fd;
 
 extern int dma_sync();
 

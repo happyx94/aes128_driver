@@ -1,6 +1,5 @@
 /*
     DMA User space driver.
-
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,9 +40,10 @@
 #define dma_mm2s_poll() ((dma_reg(MM2S_STATUS_REG) & (1<<1 | 1<<12)) == (1<<1 | 1<<12) ? SUCCESS : FAILURE)
 
 #define DMA_SOURCE_ADDR       buf_phy_addr
-#define DMA_DESTINATION_ADDR  (buf_phy_addr + (RSV_BUF_LEN * 4))
+#define DMA_DESTINATION_ADDR  (buf_phy_addr + RSV_BUF_LEN / 2)
 
 void *pbuf;
+int mem_fd;
 static void *pdma;
 static u32 buf_phy_addr;
 
@@ -133,6 +133,8 @@ void dma_clean_up()
     if(NULL != pdma)  munmap(pdma, DMA_MMAP_LEN);
     if(NULL != pbuf)  munmap(pbuf, RSV_BUF_LEN);
     buf_phy_addr = 0;
+    close(mem_fd);
+    mem_fd = -1;
 }
 
 int dma_reset()
@@ -184,10 +186,17 @@ int dma_start(u32 len)
     return SUCCESS;
 }
 
+int axi_lite_init()
+{
+
+
+
+}
+
 
 int dma_init()
 {
-    int mem_fd, rsv_fd;
+    int rsv_fd;
 
 
     printf("[INFO] Initializing the DMA driver...\n");
