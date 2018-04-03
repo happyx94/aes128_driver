@@ -5,88 +5,49 @@
 
 #include "dma_driver.h"
 
-#define MEM_DUMP_MAX_BYTES  256
 
-#define AES_KEY_ADDR            0x43C10000
-#define AES_KEY_REGS_MAP_LEN    4096
+#define TEST_KEY_HH    0x00010203
+#define TEST_KEY_HL    0x04050607
+#define TEST_KEY_LH    0x08090A0B
+#define TEST_KEY_LH    0x0C0D0E0F
 
-static void memdump(void* buf_ptr, int byte_count) 
-{
-    char *p = buf_ptr;
-    int offset = 0;
-
-    if (byte_count > MEM_DUMP_MAX_BYTES)
-    {
-        printf("Buffer size is %d bytes. Only show the last %d bytes...\n", byte_count, MEM_DUMP_MAX_BYTES);
-        offset = byte_count - MEM_DUMP_MAX_BYTES;
-    }    
-
-    for (; offset < byte_count; offset++) 
-    {
-        printf("%02x", p[offset]);
-        if (offset % 4 == 3)  
-            printf(" ");
-        if (offset % 32 == 31)
-            printf("\n"); 
-    }
-    printf("\n");
-}
-
-int set_key(void *pkey)
-{
-    u32 *pregs;
-    u32 *key = pkey;
-
-    if (mem_fd < 0)
-        return FAILURE;
-
-    pregs = mmap(NULL, AES_KEY_REGS_MAP_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, AES_KEY_ADDR);
-    if (NULL == pregs)
-    {
-        perror("Failed to mmap the AES key registers");
-        return FAILURE;
-    }
-    for (int i = 0; i < 4; i++)
-    {
-        pregs[i] = key[i];
-    }
-    printf("AES key has be set.\n");
-    munmap(pregs, AES_KEY_REGS_MAP_LEN);
-
-    return SUCCESS;
-}
+#define TEST_VALUE     0x00
+#define TEST_LENGTH    (16 * 5)
+#define TEST_ROUNDS    1
 
 int main(int argc, char *argv[])
 {
-    unsigned char key[16];
+    u32 key[4];
+
 
     if (FAILURE == dma_init())
         exit(1);
 
-    for (int i = 0; i < 16; i++)
-    {
-        key[i] = (unsigned char)0xAA;
-    }
+    key[0] = TEST_KEY_LH;
+    key[1] = TEST_KEY_LH;
+    key[2] = TEST_KEY_HL;
+    key[3] = TEST_KEY_HH;
+ 
+    if (FAILURE == aes_set_key(key))
+        exit(1);
 
-    set_key(key);
     printf("AES Key: \n");
     memdump(key, 16);
 
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < TEST_LENGTH; i++)
     {
-        psrc[i] = 0;
+        psrc[i] = TEST_VALUE + i;
     }
-
     printf("Test values: \n");
-    memdump(psrc, 16);
+    memdump(psrc, TEST_LENGTH);
 
-    for (int round = 0; round < 5; round++)
+    for (int round = 0; round < TEST_ROUNDS; round++)
     {
         printf("------- Round %d -------\n", round + 1);
 
-        if (FAILURE == dma_start(16))
+        if (FAILURE == dma_start(TEST_LENGTH))
             exit(1);
-
+        
         if (FAILURE == dma_sync())
             exit(1);
 

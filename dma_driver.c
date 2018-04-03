@@ -10,11 +10,14 @@
 
 #include "dma_driver.h"
 
-
 #define POLLING_INTERVAL    500
 
-#define DMA_BASE_ADDR       0x40400000
+/* AES-related macros */
+#define AES_KEY_ADDR            0x43C10000
+#define AES_KEY_REGS_MAP_LEN    4096
 
+/* DMA-related macros */
+#define DMA_BASE_ADDR       0x40400000
 #define DMA_MMAP_LEN        4096
 
 #define MM2S_CNTL_REG       0x00
@@ -30,6 +33,7 @@
 #define DMA_HALT            0
 #define DMA_RESET           4
 
+/* Macro functions */
 #define set_dma_reg(offset,value) ((u32 *)pdma)[(offset)>>2] = value
 #define dma_reg(offset) (((u32 *)pdma)[(offset)>>2])
 
@@ -87,6 +91,13 @@ char* dma_status(u8 offset)
     return status_buf;
 }
 
+int dma_quick_poll()
+{
+    if (dma_mm2s_poll() && dma_s2mm_poll())
+        return SUCCESS;
+    return FAILURE;
+}
+
 static int dma_s2mm_sync()
 {
     int count = 0;
@@ -117,16 +128,6 @@ int dma_sync()
         return FAILURE;
     return dma_s2mm_sync();
 }
-
-/*
-void error_exit(const char* msg, int print_usage)
-{
-    printf(msg);
-    if (print_usage > 0)
-        printf("Usage: ./DMATest <SOURCE_ADDRESS> <DESTINATION_ADDRESS> <DATA_LENGTH> [-s]\n\n");
-    exit(1);
-}
-*/
 
 void dma_clean_up()
 {
@@ -186,14 +187,6 @@ int dma_start(u32 len)
     return SUCCESS;
 }
 
-int axi_lite_init()
-{
-
-
-
-}
-
-
 int dma_init()
 {
     int rsv_fd;
@@ -250,3 +243,53 @@ int dma_init()
     return dma_reset();
 }
 
+int aes_set_key(void *pkey)
+{
+    u32 *pregs;
+    u32 *key = pkey;
+
+    if (mem_fd < 0)
+        return FAILURE;
+
+    pregs = mmap(NULL, AES_KEY_REGS_MAP_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, AES_KEY_ADDR);
+    if (NULL == pregs)
+    {
+        perror("Failed to mmap the AES key registers");
+        return FAILURE;
+    }
+    for (int i = 0; i < 4; i++)
+    {
+        pregs[3-i] = key[i];
+    }
+    printf("AES key has be set.\n");
+    munmap(pregs, AES_KEY_REGS_MAP_LEN);
+
+    return SUCCESS;
+}
+
+int aes_set_iv(void *piv)
+{
+    return FAILURE;
+}
+
+void memdump(void* buf_ptr, int byte_count) 
+{
+    char *p = buf_ptr;
+    int offset = 0;
+
+    if (byte_count > MEM_DUMP_MAX_BYTES)
+    {
+        printf("Buffer size is %d bytes. Only show the last %d bytes...\n", byte_count, MEM_DUMP_MAX_BYTES);
+        offset = byte_count - MEM_DUMP_MAX_BYTES;
+    }    
+
+    for (; offset < byte_count; offset++) 
+    {
+        printf("%02x", p[offset]);
+        if (offset % 4 == 3)  
+            printf(" ");
+        if (offset % 32 == 31)
+            printf("\n"); 
+    }
+    printf("\n");
+}
