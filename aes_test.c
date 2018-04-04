@@ -9,7 +9,7 @@
 #define TEST_KEY_HH    0x00010203
 #define TEST_KEY_HL    0x04050607
 #define TEST_KEY_LH    0x08090A0B
-#define TEST_KEY_LH    0x0C0D0E0F
+#define TEST_KEY_LL    0x0C0D0E0F
 
 #define TEST_VALUE     0x00
 #define TEST_LENGTH    (16 * 5)
@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
     if (FAILURE == dma_init())
         exit(1);
 
-    key[0] = TEST_KEY_LH;
+    key[0] = TEST_KEY_LL;
     key[1] = TEST_KEY_LH;
     key[2] = TEST_KEY_HL;
     key[3] = TEST_KEY_HH;
