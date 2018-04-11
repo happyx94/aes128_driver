@@ -33,16 +33,19 @@
  * Pre-condition: fdin and fdout are opened and are read/writable.
  * Return: SUCCESS or FAILURE
  */
-int encrypt_file(int fdin, int fdout, u32* key)
+int encrypt_file(int fdin, int fdout, u32 *key, u32 *iv)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
 
 
     if (FAILURE == dma_init())
-        exit(1);
+        return FAILURE;
+
+    if (FAILURE == aes_set_iv(iv))
+        return FAILURE;
 
     if (FAILURE == aes_set_key(key))
-        exit(1);
+        return FAILURE;
 
     /* Read from infile to buffer, enc/decrypt buffer, and outputs to outfile */
     while((cnt = (u32)read(fdin, psrc, MAX_SRC_LEN)) > 0)
@@ -57,10 +60,10 @@ int encrypt_file(int fdin, int fdout, u32* key)
 
         /* encryption happens here */
         if (FAILURE == dma_start(cnt))
-            exit(1);
+            return FAILURE;
 
         if (FAILURE == dma_sync())
-            exit(1);
+            return FAILURE;
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
         {
@@ -103,6 +106,7 @@ int main(int argc, char *argv[])
     char *outfile = NULL;
     char *fin_name, *fout_name; /* in/outfile paths */
     u32 key[4];
+    u32 iv[4];
     struct {
         unsigned int p : 1;
         unsigned int i : 1;
@@ -112,6 +116,7 @@ int main(int argc, char *argv[])
         unsigned int t : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
+    memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
 
     /* parse arguments and set flags/arguments */
     while((opt = getopt(argc, argv, OPTIONS)) != -1)
@@ -266,7 +271,7 @@ int main(int argc, char *argv[])
 
     if (!flags.t)
     {
-        if(FAILURE == encrypt_file(fdin, fdout, key))
+        if(FAILURE == encrypt_file(fdin, fdout, key, iv))
         {
             close(fdin);
             close(fdout);
