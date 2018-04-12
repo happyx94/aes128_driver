@@ -269,7 +269,37 @@ int aes_set_key(void *pkey)
 
 int aes_set_iv(void *piv)
 {
-    return FAILURE;
+    u32 *pregs;
+    u32 *iv = piv;
+    u32 temp[4];
+
+    if (mem_fd < 0)
+        return FAILURE;
+
+    pregs = mmap(NULL, AES_KEY_REGS_MAP_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, AES_KEY_ADDR);
+    if (NULL == pregs)
+    {
+        perror("Failed to mmap the AES control registers");
+        return FAILURE;
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+        temp[3-i] = pregs[3-i];
+        pregs[3-i] = iv[i];
+    }
+    /* Set the set_IV flag */
+    pregs[4] = 0xFFFFFFFF;
+    printf("Setting the IV... \n");
+    pregs[4] = 0;
+
+    for (int i = 0; i < 4; i++)
+        pregs[i] = temp[i];
+
+    printf("AES IV has be set.\n");
+    munmap(pregs, AES_KEY_REGS_MAP_LEN);
+
+    return SUCCESS;
 }
 
 void memdump(void* buf_ptr, int byte_count) 
