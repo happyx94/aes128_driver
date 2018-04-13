@@ -13,17 +13,31 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 #include <sysexits.h>
 #include "dma_driver.h"
 
-#   define USAGE_LINE "Usage: aes128 [-vht] [-p passwdfile] [-i infile] [-o outfile] \n"
-#   define OPTIONS "vhtp:i:o:" /* Options for getopt(3) */
+#   define USAGE_LINE "Usage: aes128 [-vhtsn] [-k keyfile] [-i infile] [-o outfile] \n"
+#   define OPTIONS "vhtsnk:i:o:" /* Options for getopt(3) */
 #   define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
 
-#define TEST_KEY_HH    0x00010203
-#define TEST_KEY_HL    0x04050607
-#define TEST_KEY_LH    0x08090A0B
-#define TEST_KEY_LL    0x0C0D0E0F
+/* Key = 0x000102030405060708090A0B0C0D0E0F */
+#define TEST_KEY_HH    0x03020100
+#define TEST_KEY_HL    0x07060504
+#define TEST_KEY_LH    0x0B0A0908
+#define TEST_KEY_LL    0x0F0E0D0C
+
+
+int aes_init(u32* iv)
+{
+    if (FAILURE == dma_init())
+        return FAILURE;
+
+    if (FAILURE == aes_set_iv(iv))
+        return FAILURE;
+
+    return SUCCESS;
+}
 
 /* This method encrypts the file indicating by fdin and writes
  * to the file indicating by fdout.
@@ -33,16 +47,10 @@
  * Pre-condition: fdin and fdout are opened and are read/writable.
  * Return: SUCCESS or FAILURE
  */
-int encrypt_file(int fdin, int fdout, u32 *key, u32 *iv)
+int encrypt_file(int fdin, int fdout, u32 *key)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
 
-
-    if (FAILURE == dma_init())
-        return FAILURE;
-
-    if (FAILURE == aes_set_iv(iv))
-        return FAILURE;
 
     if (FAILURE == aes_set_key(key))
         return FAILURE;
@@ -91,6 +99,14 @@ void args_error(const char* err_msg)
     exit(EX_USAGE);
 }
 
+static inline u32 reverse32(u32 value)
+{
+    return (((value & 0x000000FF) << 24) |
+            ((value & 0x0000FF00) <<  8) |
+            ((value & 0x00FF0000) >>  8) |
+            ((value & 0xFF000000) >> 24));
+}
+
 /*
  * This is the main method of Cipher. Proper command line options
  * and arguments must be provided.
@@ -105,15 +121,19 @@ int main(int argc, char *argv[])
     char *infile = NULL;
     char *outfile = NULL;
     char *fin_name, *fout_name; /* in/outfile paths */
+    clock_t start, end;
+    double cpu_time_used;
     u32 key[4];
     u32 iv[4];
     struct {
-        unsigned int p : 1;
+        unsigned int k : 1;
         unsigned int i : 1;
         unsigned int o : 1;
         unsigned int v : 1;
         unsigned int h : 1;
         unsigned int t : 1;
+        unsigned int s : 1;
+        unsigned int n : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
     memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
@@ -132,8 +152,14 @@ int main(int argc, char *argv[])
             case 't':
                 flags.t = 1;
                 break;
-            case 'p':
-                if(flags.p == 0)  /* make sure -p hasn't been provided yet */
+            case 's':
+                flags.s = 1;
+                break;
+            case 'n':
+                flags.n = 1;
+                break;
+            case 'k':
+                if(flags.k == 0)  /* make sure -k hasn't been provided yet */
                 {
                     keyfile = malloc(strlen(optarg) + 1);
                     if (keyfile == NULL)
@@ -142,7 +168,7 @@ int main(int argc, char *argv[])
                         exit(1);
                     }
                     strcpy(keyfile, optarg);
-                    flags.p = 1;
+                    flags.k = 1;
                 }
                 else
                     args_error("Option -p should only be provided once.\n");
@@ -177,6 +203,7 @@ int main(int argc, char *argv[])
                 else
                     args_error("Option -o should only be provided once.\n");
                 break;
+
             default: /* opt == '?' */
                 args_error(NULL);
         }
@@ -199,7 +226,7 @@ int main(int argc, char *argv[])
     /* -------- arguments checking is done by here --------- */
 
     /* If -p is provided, open the password file */
-    if(flags.p)
+    if(flags.k)
     {
         if((fdkey = open(keyfile, O_RDONLY)) < 0)
         {
@@ -209,14 +236,14 @@ int main(int argc, char *argv[])
 
         char temp[9];
         temp[8] = '\0';
-        for (int i = 3;i >=0 ; i--)
+        for (int i = 0; i < 4; i++)
         {
             if (8 != read(fdkey, temp, 8))
             {
                 perror("Failed to read key file");
                 exit(EX_NOINPUT);
             }
-            key[i] = (u32) strtol(temp, NULL, 16);
+            key[i] = reverse32((u32) strtol(temp, NULL, 16));
         }
         close(fdkey);
         free(keyfile);
@@ -224,12 +251,12 @@ int main(int argc, char *argv[])
     }
     else
     {
-        key[0] = TEST_KEY_LL;
-        key[1] = TEST_KEY_LH;
-        key[2] = TEST_KEY_HL;
-        key[3] = TEST_KEY_HH;
+        key[0] = TEST_KEY_HH;
+        key[1] = TEST_KEY_HL;
+        key[2] = TEST_KEY_LH;
+        key[3] = TEST_KEY_LL;
     }
-    printf("[INFO] Key = %08x%08x%08x%08x\n", key[3], key[2], key[1], key[0]);
+    printf("[INFO] Key = %08x%08x%08x%08x (*Endianness)\n", key[0], key[1], key[2], key[3]);
 
     /* If -i is provided, open the infile */
     if(flags.i)
@@ -268,16 +295,49 @@ int main(int argc, char *argv[])
         printf("[INFO] Output is set to STDOUT\n");
     }
 
-
-    if (!flags.t)
+    if (!flags.s)
     {
-        if(FAILURE == encrypt_file(fdin, fdout, key, iv))
+        if (FAILURE == aes_init(iv))
         {
             close(fdin);
             close(fdout);
             exit(1);
         }
     }
+
+    if (flags.n)
+    {
+        printf("Option -n is set. No Encryption is done.\n");
+        close(fdin);
+        close(fdout);
+        exit(0);
+    }
+
+
+    if (flags.t)
+        start = clock();
+
+    if (flags.s)
+    {
+        printf("Software encryption has not been implemented yet!!!\n");
+    }
+    else
+    {
+        if(FAILURE == encrypt_file(fdin, fdout, key))
+        {
+            close(fdin);
+            close(fdout);
+            exit(1);
+        }
+    }
+
+    if (flags.t)
+    {
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        printf("\n--------------------------\nTotal CPU Time: %lf\n--------------------------\n\n", cpu_time_used);
+    }
+
 
     close(fdin);
     close(fdout);
