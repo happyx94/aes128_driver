@@ -304,16 +304,6 @@ int main(int argc, char *argv[])
         printf("[INFO] Output is set to STDOUT\n");
     }
 
-    if (!flags.s && !flags.d)
-    {
-        if (FAILURE == aes_init(iv))
-        {
-            close(fdin);
-            close(fdout);
-            exit(1);
-        }
-    }
-
     if (flags.n)
     {
         printf("Option -n is set. No Encryption is done.\n");
@@ -322,6 +312,12 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
+    if (FAILURE == aes_init(iv))
+    {
+        close(fdin);
+        close(fdout);
+        exit(1);
+    }
 
     if (flags.t)
         start = clock();
