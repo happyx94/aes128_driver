@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
         printf("[INFO] Output is set to STDOUT\n");
     }
 
-    if (!flags.s && !flag.d)
+    if (!flags.s && !flags.d)
     {
         if (FAILURE == aes_init(iv))
         {
