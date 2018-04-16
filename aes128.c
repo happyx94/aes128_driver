@@ -15,17 +15,20 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sysexits.h>
-#include "dma_driver.h"
 
-#   define USAGE_LINE "Usage: aes128 [-vhtsn] [-k keyfile] [-i infile] [-o outfile] \n"
-#   define OPTIONS "vhtsnk:i:o:" /* Options for getopt(3) */
-#   define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
+#include "dma_driver.h"
+#include "sw_aes.h"
+
+#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-k keyfile] [-i infile] [-o outfile] \n"
+
+#define OPTIONS "vhtsndk:i:o:" /* Options for getopt(3) */
+#define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
 
 /* Key = 0x000102030405060708090A0B0C0D0E0F */
-#define TEST_KEY_HH    0x03020100
-#define TEST_KEY_HL    0x07060504
-#define TEST_KEY_LH    0x0B0A0908
-#define TEST_KEY_LL    0x0F0E0D0C
+#define TEST_KEY_HH    0x00010203
+#define TEST_KEY_HL    0x04050607
+#define TEST_KEY_LH    0x08090A0B
+#define TEST_KEY_LL    0x0C0D0E0F
 
 
 int aes_init(u32* iv)
@@ -50,7 +53,8 @@ int aes_init(u32* iv)
 int encrypt_file(int fdin, int fdout, u32 *key)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
-
+    clock_t start, end;
+    double cpu_time_used;
 
     if (FAILURE == aes_set_key(key))
         return FAILURE;
@@ -66,12 +70,21 @@ int encrypt_file(int fdin, int fdout, u32 *key)
             }
         }
 
+        start = clock();
         /* encryption happens here */
         if (FAILURE == dma_start(cnt))
             return FAILURE;
 
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        printf("[TIMING] It takes %lf seconds to start the DMA transfer.\n", cpu_time_used);
+
         if (FAILURE == dma_sync())
             return FAILURE;
+
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        printf("[TIMING] It takes %lf seconds to complete the encryption.\n", cpu_time_used);
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
         {
@@ -97,14 +110,6 @@ void args_error(const char* err_msg)
         fputs(err_msg, stderr);
     fprintf(stderr, USAGE_LINE);
     exit(EX_USAGE);
-}
-
-static inline u32 reverse32(u32 value)
-{
-    return (((value & 0x000000FF) << 24) |
-            ((value & 0x0000FF00) <<  8) |
-            ((value & 0x00FF0000) >>  8) |
-            ((value & 0xFF000000) >> 24));
 }
 
 /*
@@ -134,6 +139,7 @@ int main(int argc, char *argv[])
         unsigned int t : 1;
         unsigned int s : 1;
         unsigned int n : 1;
+        unsigned int d : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
     memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
@@ -157,6 +163,9 @@ int main(int argc, char *argv[])
                 break;
             case 'n':
                 flags.n = 1;
+                break;
+            case 'd':
+                flags.d = 1;
                 break;
             case 'k':
                 if(flags.k == 0)  /* make sure -k hasn't been provided yet */
@@ -243,7 +252,7 @@ int main(int argc, char *argv[])
                 perror("Failed to read key file");
                 exit(EX_NOINPUT);
             }
-            key[i] = reverse32((u32) strtol(temp, NULL, 16));
+            key[i] = (u32) strtol(temp, NULL, 16);
         }
         close(fdkey);
         free(keyfile);
@@ -256,7 +265,7 @@ int main(int argc, char *argv[])
         key[2] = TEST_KEY_LH;
         key[3] = TEST_KEY_LL;
     }
-    printf("[INFO] Key = %08x%08x%08x%08x (*Endianness)\n", key[0], key[1], key[2], key[3]);
+    printf("[INFO] Key = %08x%08x%08x%08x\n", key[0], key[1], key[2], key[3]);
 
     /* If -i is provided, open the infile */
     if(flags.i)
@@ -295,7 +304,7 @@ int main(int argc, char *argv[])
         printf("[INFO] Output is set to STDOUT\n");
     }
 
-    if (!flags.s)
+    if (!flags.s && !flag.d)
     {
         if (FAILURE == aes_init(iv))
         {
@@ -319,7 +328,25 @@ int main(int argc, char *argv[])
 
     if (flags.s)
     {
-        printf("Software encryption has not been implemented yet!!!\n");
+        printf("Option -s is set. Use software encryption.\n");
+        if (0 != encrypt_file_sw(fdin, fdout, key, iv, psrc))
+        {
+            perror("encryption");
+            close(fdin);
+            close(fdout);
+            exit(1);
+        }
+    }
+    else if (flags.d)
+    {
+        printf("Option -d is set. Use software decryption.\n");
+        if (0 != decrypt_file_sw(fdin, fdout, key, iv, psrc))
+        {
+            perror("decryption");
+            close(fdin);
+            close(fdout);
+            exit(1);
+        }
     }
     else
     {

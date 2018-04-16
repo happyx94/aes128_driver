@@ -10,7 +10,7 @@
 
 #include "dma_driver.h"
 
-#define POLLING_INTERVAL    500
+#define POLLING_INTERVAL    10
 
 /* AES-related macros */
 #define AES_KEY_ADDR            0x43C10000

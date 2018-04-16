@@ -3,6 +3,10 @@
  * 
  *  Author: Hsiang-Ju Lai <happyx94@gmail.com>
  */
+#ifndef _DMA_DRIVER_H 
+#define _DMA_DRIVER_H
+
+
 #ifndef u32
   #define u32 unsigned int
 #endif
@@ -114,3 +118,5 @@ extern int aes_set_iv(void *piv);
  *  Print the buffer.
  */
 extern void memdump(void* buf, int byte_count);
+
+#endif

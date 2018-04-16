@@ -5,7 +5,8 @@ APP_OBJS = aes128.o
 
 COMMON_DIR = ~/projects/common
 APP_OBJS += $(COMMON_DIR)/dma_driver.o
-HEADERS = $(COMMON_DIR)/dma_driver.h
+APP_OBJS += $(COMMON_DIR)/sw_aes.o
+HEADERS = $(COMMON_DIR)/dma_driver.h $(COMMON_DIR)/sw_aes.h
 
 all: build
 
