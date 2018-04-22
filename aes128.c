@@ -20,9 +20,9 @@
 #include "dma_driver.h"
 #include "sw_aes.h"
 
-#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
+#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-p interval] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
 
-#define OPTIONS "vhtsndf:k:i:o:" /* Options for getopt(3) */
+#define OPTIONS "vhtsndp:f:k:i:o:" /* Options for getopt(3) */
 #define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
 
 /* Key = 0x000102030405060708090A0B0C0D0E0F */
@@ -54,8 +54,6 @@ int aes_init(u32* iv)
 int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timing)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
-    struct timeval tv;
-    double begin_t = 0, end_t;
     clock_t start = 0, end;
     double cpu_time_used;
     size_t read_len = (size_t) (forced_buffer_len > 0 ? forced_buffer_len : MAX_SRC_LEN);
@@ -90,8 +88,6 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
-            gettimeofday(&tv, NULL);
-            begin_t = (tv.tv_sec) * 1000.0f + (tv.tv_usec) / 1000.0f ;
             start = clock();
         }
 
@@ -112,12 +108,9 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
-            gettimeofday(&tv, NULL);
-            end_t = (tv.tv_sec) * 1000.0f + (tv.tv_usec) / 1000.0f ;
             end = clock();
             cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-            printf("[TIMING] CPU Time: %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
-            printf("[TIMING] Total Execution Time: %lf ms.\n", end_t - begin_t);
+            printf("[TIMING] It takes %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
         }
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
@@ -157,6 +150,7 @@ int main(int argc, char *argv[])
     int opt, rc; /* option and error return code holders */
     int fdin, fdout, fdkey; /* file descriptors of in/outfile */
     int forced_transfer_len = -1;
+    int interval = -1;
     char *keyfile = NULL; /* char pointer to the password */
     char *infile = NULL;
     char *outfile = NULL;
@@ -176,6 +170,7 @@ int main(int argc, char *argv[])
         unsigned int n : 1;
         unsigned int d : 1;
         unsigned int f : 1;
+        unsigned int p : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
     memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
@@ -216,13 +211,22 @@ int main(int argc, char *argv[])
                     flags.k = 1;
                 }
                 else
-                    args_error("[ERROR] Option -p should only be provided once.\n");
+                    args_error("[ERROR] Option -k should only be provided once.\n");
                 break;
             case 'f':
                 if(flags.f == 0)  /* make sure -k hasn't been provided yet */
                 {
                     forced_transfer_len = atoi(optarg);
                     flags.f = 1;
+                }
+                else
+                    args_error("[ERROR] Option -f should only be provided once.\n");
+                break;
+            case 'p':
+                if(flags.p == 0)  /* make sure -k hasn't been provided yet */
+                {
+                    interval = atoi(optarg);
+                    flags.p = 1;
                 }
                 else
                     args_error("[ERROR] Option -p should only be provided once.\n");
@@ -365,6 +369,12 @@ int main(int argc, char *argv[])
         close(fdin);
         close(fdout);
         exit(1);
+    }
+
+    if (flags.p)
+    {
+        polling_interval = interval;
+        printf("[INFO] Set the polling interval to %d us\n", interval);
     }
 
     if (flags.t)

@@ -25,6 +25,7 @@
 #define pdest               (((char *)pbuf)+RSV_BUF_LEN/2)
 extern void *pbuf;
 extern int mem_fd;
+extern int polling_interval;
 
 /* -------------------- DMA Functions -------------------- */
 

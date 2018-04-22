@@ -10,8 +10,6 @@
 
 #include "dma_driver.h"
 
-#define POLLING_INTERVAL    10
-
 /* AES-related macros */
 #define AES_KEY_ADDR            0x43C10000
 #define AES_KEY_REGS_MAP_LEN    4096
@@ -48,6 +46,7 @@
 
 void *pbuf;
 int mem_fd;
+int polling_interval;
 static void *pdma;
 static u32 buf_phy_addr;
 
@@ -103,9 +102,14 @@ static int dma_s2mm_sync()
     int count = 0;
 
     printf("[INFO] Waiting for s2mm to finish tranfering...\n");
-    while(FAILURE == dma_s2mm_poll() && count++ < 2000)
+    while(FAILURE == dma_s2mm_poll())
     {
-        usleep(POLLING_INTERVAL);
+        if (polling_interval > 0)
+        {
+            usleep((__useconds_t) polling_interval);
+            if (count++ >= 10000)
+                break;
+        }
     }
     return (count < 2001 ? SUCCESS : FAILURE); 
 }
@@ -115,9 +119,14 @@ static int dma_mm2s_sync()
     int count = 0;
 
     printf("[INFO] Waiting for mm2s to finish tranfering...\n");
-    while(FAILURE == dma_mm2s_poll() && count++ < 2000)
+    while(FAILURE == dma_mm2s_poll())
     {
-        usleep(POLLING_INTERVAL);
+        if (polling_interval > 0)
+        {
+            usleep((__useconds_t) polling_interval);
+            if (count++ >= 10000)
+                break;
+        }
     }
     return (count < 2001 ? SUCCESS : FAILURE); 
 }
@@ -191,6 +200,8 @@ int dma_init()
 {
     int rsv_fd;
 
+    polling_interval = 0;
+    printf("[INFO] Set the polling interval to 0 us (busy waiting).\n");
 
     printf("[INFO] Initializing the DMA driver...\n");
 
@@ -261,7 +272,7 @@ int aes_set_key(void *pkey)
     {
         pregs[3-i] = key[i];
     }
-    printf("AES key has be set.\n");
+    printf("[INFO] AES key has be set.\n");
     munmap(pregs, AES_KEY_REGS_MAP_LEN);
 
     return SUCCESS;
