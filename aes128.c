@@ -19,9 +19,9 @@
 #include "dma_driver.h"
 #include "sw_aes.h"
 
-#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-k keyfile] [-i infile] [-o outfile] \n"
+#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
 
-#define OPTIONS "vhtsndk:i:o:" /* Options for getopt(3) */
+#define OPTIONS "vhtsndf:k:i:o:" /* Options for getopt(3) */
 #define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
 
 /* Key = 0x000102030405060708090A0B0C0D0E0F */
@@ -50,41 +50,64 @@ int aes_init(u32* iv)
  * Pre-condition: fdin and fdout are opened and are read/writable.
  * Return: SUCCESS or FAILURE
  */
-int encrypt_file(int fdin, int fdout, u32 *key)
+int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timing)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
-    clock_t start, end;
+    clock_t start = 0, end;
     double cpu_time_used;
+    size_t read_len = (size_t) (forced_buffer_len > 0 ? forced_buffer_len : MAX_SRC_LEN);
 
     if (FAILURE == aes_set_key(key))
         return FAILURE;
 
     /* Read from infile to buffer, enc/decrypt buffer, and outputs to outfile */
-    while((cnt = (u32)read(fdin, psrc, MAX_SRC_LEN)) > 0)
+    while((cnt = (u32)read(fdin, psrc, read_len)) > 0)
     {
-        if (cnt % 16 != 0)
+        if (forced_buffer_len > 0)
         {
-            for (; cnt % 16 != 0; cnt++)
+            size_t n_left = forced_buffer_len - cnt;
+            while(n_left > 0)
             {
-                psrc[cnt] = 0;
+                ssize_t n = read(fdin, psrc + cnt, n_left);
+                n_left -= n;
+                cnt += n;
+            }
+        }
+        else
+        {
+            if (cnt % 16 != 0)
+            {
+                for (; cnt % 16 != 0; cnt++)
+                {
+                    psrc[cnt] = 0;
+                }
             }
         }
 
-        start = clock();
+
+        if (timing)
+            start = clock();
+
         /* encryption happens here */
         if (FAILURE == dma_start(cnt))
             return FAILURE;
 
-        end = clock();
-        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("[TIMING] It takes %lf seconds to start the DMA transfer.\n", cpu_time_used);
+        if (timing)
+        {
+            end = clock();
+            cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+            printf("[TIMING] It takes %lf seconds to start the DMA transfer.\n", cpu_time_used);
+        }
 
         if (FAILURE == dma_sync())
             return FAILURE;
 
-        end = clock();
-        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("[TIMING] It takes %lf seconds to complete the encryption.\n", cpu_time_used);
+        if (timing)
+        {
+            end = clock();
+            cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+            printf("[TIMING] It takes %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+        }
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
         {
@@ -122,11 +145,12 @@ int main(int argc, char *argv[])
 {
     int opt, rc; /* option and error return code holders */
     int fdin, fdout, fdkey; /* file descriptors of in/outfile */
+    int forced_transfer_len = -1;
     char *keyfile = NULL; /* char pointer to the password */
     char *infile = NULL;
     char *outfile = NULL;
     char *fin_name, *fout_name; /* in/outfile paths */
-    clock_t start, end;
+    clock_t start = 0, end;
     double cpu_time_used;
     u32 key[4];
     u32 iv[4];
@@ -140,6 +164,7 @@ int main(int argc, char *argv[])
         unsigned int s : 1;
         unsigned int n : 1;
         unsigned int d : 1;
+        unsigned int f : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
     memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
@@ -180,7 +205,16 @@ int main(int argc, char *argv[])
                     flags.k = 1;
                 }
                 else
-                    args_error("Option -p should only be provided once.\n");
+                    args_error("[ERROR] Option -p should only be provided once.\n");
+                break;
+            case 'f':
+                if(flags.f == 0)  /* make sure -k hasn't been provided yet */
+                {
+                    forced_transfer_len = atoi(optarg);
+                    flags.f = 1;
+                }
+                else
+                    args_error("[ERROR] Option -p should only be provided once.\n");
                 break;
             case 'i':
                 if(flags.i == 0)  /* make sure -p hasn't been provided yet */
@@ -195,7 +229,7 @@ int main(int argc, char *argv[])
                     flags.i = 1;
                 }
                 else
-                    args_error("Option -i should only be provided once.\n");
+                    args_error("[ERROR] Option -i should only be provided once.\n");
                 break;
             case 'o':
                 if(flags.o == 0)  /* make sure -p hasn't been provided yet */
@@ -210,7 +244,7 @@ int main(int argc, char *argv[])
                     flags.o = 1;
                 }
                 else
-                    args_error("Option -o should only be provided once.\n");
+                    args_error("[ERROR] Option -o should only be provided once.\n");
                 break;
 
             default: /* opt == '?' */
@@ -229,10 +263,13 @@ int main(int argc, char *argv[])
 
     // make sure two file paths for in/out file are provided
     if(argc - optind != 0)
-        args_error("Extra arguments are provided.\n");
+        args_error("[ERROR] Extra arguments are provided.\n");
 
 
     /* -------- arguments checking is done by here --------- */
+
+    if (flags.f)
+        printf("[INFO] Forced transfer length to be exact %d bytes.\n", forced_transfer_len);
 
     /* If -p is provided, open the password file */
     if(flags.k)
@@ -306,7 +343,7 @@ int main(int argc, char *argv[])
 
     if (flags.n)
     {
-        printf("Option -n is set. No Encryption is done.\n");
+        printf("[INFO] Option -n is set. Nothing is done. Exiting with code 0...\n");
         close(fdin);
         close(fdout);
         exit(0);
@@ -324,7 +361,7 @@ int main(int argc, char *argv[])
 
     if (flags.s)
     {
-        printf("Option -s is set. Use software encryption.\n");
+        printf("[INFO] Option -s is set. Use software encryption.\n");
         if (0 != encrypt_file_sw(fdin, fdout, key, iv, psrc))
         {
             perror("encryption");
@@ -335,7 +372,7 @@ int main(int argc, char *argv[])
     }
     else if (flags.d)
     {
-        printf("Option -d is set. Use software decryption.\n");
+        printf("[INFO] Option -d is set. Use software decryption.\n");
         if (0 != decrypt_file_sw(fdin, fdout, key, iv, psrc))
         {
             perror("decryption");
@@ -346,7 +383,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        if(FAILURE == encrypt_file(fdin, fdout, key))
+        if(FAILURE == encrypt_file(fdin, fdout, key, forced_transfer_len, flags.t))
         {
             close(fdin);
             close(fdout);

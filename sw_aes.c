@@ -39,6 +39,7 @@ NOTE:   String length must be evenly divisible by 16byte (str_len % 16 == 0)
 #include <stdint.h>
 #include <string.h> // CBC mode, for memset
 #include <unistd.h>
+#include <time.h>
 
 #include "sw_aes.h"
 
@@ -458,11 +459,13 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
 {
     size_t cnt;
     struct AES_ctx ctx;
+    clock_t start, end;
+    double cpu_time_used;
 
     AES_init_ctx_iv(&ctx, key, iv);
 
     /* Read from infile to buffer, enc/decrypt buffer, and outputs to outfile */
-    while ((cnt = read(fdin, buf, 1024 * 1024)) > 0)
+    while ((cnt = (size_t) read(fdin, buf, 1024 * 1024)) > 0)
     {
         if (cnt % 16 != 0)
         {
@@ -472,11 +475,17 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
             }
         }
 
+
+        start = clock();
         /* encryption happens here */
         if (dec)
-            AES_CBC_decrypt_buffer(&ctx, buf, cnt);
+            AES_CBC_decrypt_buffer(&ctx, buf, (uint32_t) cnt);
         else
-            AES_CBC_encrypt_buffer(&ctx, buf, cnt);
+            AES_CBC_encrypt_buffer(&ctx, buf, (uint32_t) cnt);
+
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        printf("[TIMING] It takes %lf seconds to %scrypt the file.\n", cpu_time_used, dec ? "de" : "en");
 
         /* Write exactly how many bytes it reads */
         if (write(fdout, buf, cnt) != cnt)

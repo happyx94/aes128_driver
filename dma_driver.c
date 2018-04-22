@@ -290,13 +290,13 @@ int aes_set_iv(void *piv)
     }
     /* Set the set_IV flag */
     pregs[4] = 0xFFFFFFFF;
-    printf("Setting the IV... \n");
+    printf("[INFO] Setting the IV... \n");
     pregs[4] = 0;
 
     for (int i = 0; i < 4; i++)
         pregs[i] = temp[i];
 
-    printf("AES IV has be set.\n");
+    printf("[INFO] AES IV has be set.\n");
     munmap(pregs, AES_KEY_REGS_MAP_LEN);
 
     return SUCCESS;
@@ -309,7 +309,7 @@ void memdump(void* buf_ptr, int byte_count)
 
     if (byte_count > MEM_DUMP_MAX_BYTES)
     {
-        printf("Buffer size is %d bytes. Only show the last %d bytes...\n", byte_count, MEM_DUMP_MAX_BYTES);
+        printf("[DEBUG] Buffer size is %d bytes. Only show the last %d bytes...\n", byte_count, MEM_DUMP_MAX_BYTES);
         offset = byte_count - MEM_DUMP_MAX_BYTES;
     }    
 
