@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sysexits.h>
+#include <sys/time.h>
 
 #include "dma_driver.h"
 #include "sw_aes.h"
@@ -53,6 +54,8 @@ int aes_init(u32* iv)
 int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timing)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
+    struct timeval tv;
+    double begin_t = 0, end_t;
     clock_t start = 0, end;
     double cpu_time_used;
     size_t read_len = (size_t) (forced_buffer_len > 0 ? forced_buffer_len : MAX_SRC_LEN);
@@ -86,7 +89,12 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
 
         if (timing)
+        {
+            gettimeofday(&tv, NULL);
+            begin_t = (tv.tv_sec) * 1000.0f + (tv.tv_usec) / 1000.0f ;
             start = clock();
+        }
+
 
         /* encryption happens here */
         if (FAILURE == dma_start(cnt))
@@ -104,9 +112,12 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
+            gettimeofday(&tv, NULL);
+            end_t = (tv.tv_sec) * 1000.0f + (tv.tv_usec) / 1000.0f ;
             end = clock();
             cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-            printf("[TIMING] It takes %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+            printf("[TIMING] CPU Time: %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+            printf("[TIMING] Total Execution Time: %lf ms.\n", end_t - begin_t);
         }
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
