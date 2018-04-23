@@ -24,7 +24,7 @@ void AES_ctx_set_iv(struct AES_ctx* ctx, const uint8_t* iv);
 void AES_CBC_encrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, uint32_t length);
 void AES_CBC_decrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, uint32_t length);
 
-int encrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf);
-int decrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf);
+int encrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf, int rev, int forced_block_len);
+int decrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf, int rev, int forced_block_len);
 
 #endif

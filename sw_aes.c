@@ -455,24 +455,67 @@ void AES_CBC_decrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, uint32_t length)
     }
 }
 
-static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int dec)
+static inline void reverse_bytes(void *in, size_t size)
+{
+    unsigned char *start, *end;
+
+    for ( start = (unsigned char *)in, end = start + size - 1; start < end; ++start, --end )
+    {
+        unsigned char swap = *start;
+        *start = *end;
+        *end = swap;
+    }
+}
+
+static void reverse_blocks(void *buf, size_t len, size_t block_size)
+{
+    unsigned char *ptr = buf;
+
+    for (size_t i = 0; i < len; i += block_size)
+    {
+        reverse_bytes(ptr + i, block_size);
+    }
+}
+
+
+static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int forced_block_len, int rev, int dec)
 {
     size_t cnt;
     struct AES_ctx ctx;
+    size_t read_len = (size_t) (forced_block_len > 0 ? forced_block_len : 1024 * 1024);
     clock_t start, end;
     double cpu_time_used;
 
     AES_init_ctx_iv(&ctx, key, iv);
 
     /* Read from infile to buffer, enc/decrypt buffer, and outputs to outfile */
-    while ((cnt = (size_t) read(fdin, buf, 1024 * 1024)) > 0)
+    while ((cnt = (size_t) read(fdin, buf, read_len)) > 0)
     {
-        if (cnt % 16 != 0)
+        if (forced_block_len > 0)
         {
-            for (; cnt % 16 != 0; cnt++)
+            size_t n_left = forced_block_len - cnt;
+            while(n_left > 0)
             {
-                ((char *)buf)[cnt] = 0;
+                ssize_t n = read(fdin, ((char *)buf) + cnt, n_left);
+                n_left -= n;
+                cnt += n;
             }
+        }
+        else
+        {
+            if (cnt % 16 != 0)
+            {
+                for (; cnt % 16 != 0; cnt++)
+                {
+                    ((char *)buf)[cnt] = 0;
+                }
+            }
+        }
+
+        if (rev)
+        {
+            printf("[INFO] Reverse the byte-order.\n");
+            reverse_blocks(buf, cnt, 16);
         }
 
 
@@ -487,6 +530,9 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
         printf("[TIMING] It takes %lf seconds to %scrypt the file.\n", cpu_time_used, dec ? "de" : "en");
 
+        if (rev)
+            reverse_blocks(buf, cnt, 16);
+
         /* Write exactly how many bytes it reads */
         if (write(fdout, buf, cnt) != cnt)
         {
@@ -498,12 +544,12 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
     return 0;
 }
 
-int decrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf)
+int decrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf, int rev, int forced_block_len)
 {
-    return file_cipher(fdin, fdout, key, iv, buf, 1);
+    return file_cipher(fdin, fdout, key, iv, buf, forced_block_len, rev, 1);
 }
 
-int encrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf)
+int encrypt_file_sw(int fdin, int fdout, void *key, void *iv, void *buf, int rev, int forced_block_len)
 {
-    return file_cipher(fdin, fdout, key, iv, buf, 0);
+    return file_cipher(fdin, fdout, key, iv, buf, forced_block_len, rev, 0);
 }

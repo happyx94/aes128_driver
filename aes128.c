@@ -20,9 +20,9 @@
 #include "dma_driver.h"
 #include "sw_aes.h"
 
-#define USAGE_LINE "Usage: aes128 [-vhtsnd] [-p interval] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
+#define USAGE_LINE "Usage: aes128 [-vhtsndr] [-p interval] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
 
-#define OPTIONS "vhtsndp:f:k:i:o:" /* Options for getopt(3) */
+#define OPTIONS "vhtsndrp:f:k:i:o:" /* Options for getopt(3) */
 #define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
 
 /* Key = 0x000102030405060708090A0B0C0D0E0F */
@@ -43,6 +43,12 @@ int aes_init(u32* iv)
     return SUCCESS;
 }
 
+static inline uint64_t time_diff_in_us(struct timespec *start, struct timespec *end)
+{
+    return (uint64_t) ((end->tv_sec * 1000000 + (uint64_t) (end->tv_nsec / 1000))
+                       - (start->tv_sec * 1000000 + (uint64_t)(start->tv_nsec / 1000)));
+}
+
 /* This method encrypts the file indicating by fdin and writes
  * to the file indicating by fdout.
  * Parameters: fdin, the file descriptor of the infile
@@ -54,6 +60,7 @@ int aes_init(u32* iv)
 int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timing)
 {
     u32 cnt; /* size of page, number of bytes read, blowfish variable */
+    struct timespec begin_t, end_t;
     clock_t start = 0, end;
     double cpu_time_used;
     size_t read_len = (size_t) (forced_buffer_len > 0 ? forced_buffer_len : MAX_SRC_LEN);
@@ -88,6 +95,7 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
+            clock_gettime(CLOCK_REALTIME, &begin_t);
             start = clock();
         }
 
@@ -108,9 +116,11 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
+            clock_gettime(CLOCK_REALTIME, &end_t);
             end = clock();
             cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-            printf("[TIMING] It takes %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+            printf("[TIMING] CPU Time: %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+            printf("[TIMING] Total Time: %ld micro-seconds.\n", time_diff_in_us(&begin_t, &end_t));
         }
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
@@ -154,9 +164,10 @@ int main(int argc, char *argv[])
     char *keyfile = NULL; /* char pointer to the password */
     char *infile = NULL;
     char *outfile = NULL;
-    char *fin_name, *fout_name; /* in/outfile paths */
+    char *buf = psrc;
     clock_t start = 0, end;
     double cpu_time_used;
+    struct timespec begin_t, end_t;
     u32 key[4];
     u32 iv[4];
     struct {
@@ -171,6 +182,7 @@ int main(int argc, char *argv[])
         unsigned int d : 1;
         unsigned int f : 1;
         unsigned int p : 1;
+        unsigned int r : 1;
     } flags; /* flags for command line options */
     memset(&flags, 0, sizeof(flags)); /* zero the flags */
     memset(iv, 0, sizeof(u32) * 4); /* zero the iv */
@@ -197,6 +209,9 @@ int main(int argc, char *argv[])
                 break;
             case 'd':
                 flags.d = 1;
+                break;
+            case 'r':
+                flags.r = 1;
                 break;
             case 'k':
                 if(flags.k == 0)  /* make sure -k hasn't been provided yet */
@@ -356,19 +371,14 @@ int main(int argc, char *argv[])
         printf("[INFO] Output is set to STDOUT\n");
     }
 
-    if (flags.n)
+    if (!flags.n)
     {
-        printf("[INFO] Option -n is set. Nothing is done. Exiting with code 0...\n");
-        close(fdin);
-        close(fdout);
-        exit(0);
-    }
-
-    if (FAILURE == aes_init(iv))
-    {
-        close(fdin);
-        close(fdout);
-        exit(1);
+        if (FAILURE == aes_init(iv))
+        {
+            close(fdin);
+            close(fdout);
+            exit(1);
+        }
     }
 
     if (flags.p)
@@ -378,12 +388,26 @@ int main(int argc, char *argv[])
     }
 
     if (flags.t)
+    {
+        clock_gettime(CLOCK_REALTIME, &begin_t);
         start = clock();
+    }
 
     if (flags.s)
     {
+        if (flags.n)
+        {
+            if (NULL == (buf = malloc(1024 * 1024)))
+            {
+                perror("malloc");
+                close(fdin);
+                close(fdout);
+                exit(1);
+            }
+        }
+
         printf("[INFO] Option -s is set. Use software encryption.\n");
-        if (0 != encrypt_file_sw(fdin, fdout, key, iv, psrc))
+        if (0 != encrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))
         {
             perror("encryption");
             close(fdin);
@@ -393,8 +417,19 @@ int main(int argc, char *argv[])
     }
     else if (flags.d)
     {
+        if (flags.n)
+        {
+            if (NULL == (buf = malloc(1024 * 1024)))
+            {
+                perror("malloc");
+                close(fdin);
+                close(fdout);
+                exit(1);
+            }
+        }
+
         printf("[INFO] Option -d is set. Use software decryption.\n");
-        if (0 != decrypt_file_sw(fdin, fdout, key, iv, psrc))
+        if (0 != decrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))
         {
             perror("decryption");
             close(fdin);
@@ -402,7 +437,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
-    else
+    else if (!flags.n)
     {
         if(FAILURE == encrypt_file(fdin, fdout, key, forced_transfer_len, flags.t))
         {
@@ -411,12 +446,20 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
+    else /* flags.n */
+    {
+        printf("[INFO] Option -n is set. No actions are performed.\n");
+    }
 
     if (flags.t)
     {
         end = clock();
+        clock_gettime(CLOCK_REALTIME, &end_t);
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("\n--------------------------\nTotal CPU Time: %lf\n--------------------------\n\n", cpu_time_used);
+        printf("\n\n--------------------- Timing Summary --------------------\n\n");
+        printf("\tTotal CPU Time: %lf seconds.\n\n", cpu_time_used);
+        printf("\tTotal Real Time: %ld micro-seconds(us).", time_diff_in_us(&begin_t, &end_t));
+        printf("\n\n---------------------------------------------------------\n\n");
     }
 
 
