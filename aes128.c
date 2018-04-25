@@ -6,7 +6,7 @@
  * Description:
  *  This program enc/decrypts a file and produces a new file with the result.
  *  Proper command line options and arguments must be provided:
- *      Usage: ./cipher [-devh] [-p PASSWD] infile outfile
+ *      Usage: ./aes128 [-vhtsndr] [-p interval] [-f nbytes] [-k keyfile] [-i infile] [-o outfile]
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,8 +22,22 @@
 
 #define USAGE_LINE "Usage: aes128 [-vhtsndr] [-p interval] [-f nbytes] [-k keyfile] [-i infile] [-o outfile] \n"
 
+#define HELP "AES128: Encrypt a FILE with AES128 in CBC mode. Options...\n\n\
+\t-v: Print a version line. \n\n\
+\t-h: Display the help (this) message. \n\n\
+\t-t: Display timeing information. \n\n\
+\t-s: Use software encryption. \n\n\
+\t-n: No hardward encryptor. Don't try to init hardware AES. \n\n\
+\t-d: Do software decryption. \n\n\
+\t-r: Reverse the byte order of each 16 bytes block. \n\n\
+\t-p num: Set the DMA polling interval to 'num' us. \n\n\
+\t-f nbytes: Force encryption chunck size to 'nbytes'. Must be multiples of 16, \n\n\
+\t-k keyfile: Specify the path to the key file. \n\n\
+\t-i infile: Read the input from 'infile'. The default is STDIN. \n\n\
+\t-o outfile: Write the output to 'outfile'. The defailt is STDOUT. \n\n"
+
 #define OPTIONS "vhtsndrp:f:k:i:o:" /* Options for getopt(3) */
-#define VERSION "aes128 version 1.0 by Hsiang-Ju Lai\n"
+#define VERSION "aes128 version 1.2 by Hsiang-Ju Lai\n"
 
 /* Key = 0x000102030405060708090A0B0C0D0E0F */
 #define TEST_KEY_HH    0x00010203
@@ -76,6 +90,7 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
             size_t n_left = forced_buffer_len - cnt;
             while(n_left > 0)
             {
+                usleep(10);
                 ssize_t n = read(fdin, psrc + cnt, n_left);
                 n_left -= n;
                 cnt += n;
@@ -95,7 +110,7 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
-            clock_gettime(CLOCK_REALTIME, &begin_t);
+            clock_gettime(CLOCK_MONOTONIC_RAW, &begin_t);
             start = clock();
         }
 
@@ -108,7 +123,7 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
         {
             end = clock();
             cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-            printf("[TIMING] It takes %lf seconds to start the DMA transfer.\n", cpu_time_used);
+            fprintf(stderr,"[TIMING] It takes %lf seconds to start the DMA transfer.\n", cpu_time_used);
         }
 
         if (FAILURE == dma_sync())
@@ -116,11 +131,11 @@ int encrypt_file(int fdin, int fdout, u32 *key, int forced_buffer_len, int timin
 
         if (timing)
         {
-            clock_gettime(CLOCK_REALTIME, &end_t);
+            clock_gettime(CLOCK_MONOTONIC_RAW, &end_t);
             end = clock();
             cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-            printf("[TIMING] CPU Time: %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
-            printf("[TIMING] Total Time: %ld micro-seconds.\n", time_diff_in_us(&begin_t, &end_t));
+            fprintf(stderr,"[TIMING] CPU Time: %lf seconds to complete the encryption of %d bytes.\n", cpu_time_used, (int) cnt);
+            fprintf(stderr,"[TIMING] Total Time: %ld micro-seconds.\n", time_diff_in_us(&begin_t, &end_t));
         }
 
         if(write(fdout, pdest, cnt) != cnt) //write exactly how many it reads
@@ -157,7 +172,7 @@ void args_error(const char* err_msg)
  */
 int main(int argc, char *argv[])
 {
-    int opt, rc; /* option and error return code holders */
+    int opt; /* option and error return code holders */
     int fdin, fdout, fdkey; /* file descriptors of in/outfile */
     int forced_transfer_len = -1;
     int interval = -1;
@@ -284,11 +299,14 @@ int main(int argc, char *argv[])
 
     /* Check if options and arguments are valid. */
     if(flags.v)
-        printf(VERSION); //print version line
+        fprintf(stderr,VERSION); //print version line
 
     /* Display the usage line and exit if -h is provided. */
     if(flags.h)
+    {
+        fprintf(stderr,HELP);
         args_error(NULL);
+    }
 
 
     // make sure two file paths for in/out file are provided
@@ -299,7 +317,7 @@ int main(int argc, char *argv[])
     /* -------- arguments checking is done by here --------- */
 
     if (flags.f)
-        printf("[INFO] Forced transfer length to be exact %d bytes.\n", forced_transfer_len);
+        fprintf(stderr,"[INFO] Forced transfer length to be exact %d bytes.\n", forced_transfer_len);
 
     /* If -p is provided, open the password file */
     if(flags.k)
@@ -332,7 +350,7 @@ int main(int argc, char *argv[])
         key[2] = TEST_KEY_LH;
         key[3] = TEST_KEY_LL;
     }
-    printf("[INFO] Key = %08x%08x%08x%08x\n", key[0], key[1], key[2], key[3]);
+    fprintf(stderr,"[INFO] Key = %08x%08x%08x%08x\n", key[0], key[1], key[2], key[3]);
 
     /* If -i is provided, open the infile */
     if(flags.i)
@@ -342,14 +360,14 @@ int main(int argc, char *argv[])
             perror(infile);
             exit(EX_NOINPUT);
         }
-        printf("[INFO] Input is retrieved from %s\n", infile);
+        fprintf(stderr,"[INFO] Input is retrieved from %s\n", infile);
         free(infile);
         infile = NULL;
     }
     else
     {
         fdin = STDIN_FILENO;
-        printf("[INFO] Input is retrieved from STDIN\n");
+        fprintf(stderr,"[INFO] Input is retrieved from STDIN\n");
     }
 
     /* If -o is provided, open the outfile */
@@ -361,14 +379,14 @@ int main(int argc, char *argv[])
             close(fdin);
             exit(EX_CANTCREAT);
         }
-        printf("[INFO] Output is set to %s\n", outfile);
+        fprintf(stderr,"[INFO] Output is set to %s\n", outfile);
         free(outfile);
         outfile = NULL;
     }
     else
     {
         fdout = STDOUT_FILENO;
-        printf("[INFO] Output is set to STDOUT\n");
+        fprintf(stderr,"[INFO] Output is set to STDOUT\n");
     }
 
     if (!flags.n)
@@ -384,12 +402,12 @@ int main(int argc, char *argv[])
     if (flags.p)
     {
         polling_interval = interval;
-        printf("[INFO] Set the polling interval to %d us\n", interval);
+        fprintf(stderr,"[INFO] Set the polling interval to %d us\n", interval);
     }
 
     if (flags.t)
     {
-        clock_gettime(CLOCK_REALTIME, &begin_t);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_t);
         start = clock();
     }
 
@@ -406,7 +424,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        printf("[INFO] Option -s is set. Use software encryption.\n");
+        fprintf(stderr,"[INFO] Option -s is set. Use software encryption.\n");
         if (0 != encrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))
         {
             perror("encryption");
@@ -428,7 +446,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        printf("[INFO] Option -d is set. Use software decryption.\n");
+        fprintf(stderr,"[INFO] Option -d is set. Use software decryption.\n");
         if (0 != decrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))
         {
             perror("decryption");
@@ -448,18 +466,18 @@ int main(int argc, char *argv[])
     }
     else /* flags.n */
     {
-        printf("[INFO] Option -n is set. No actions are performed.\n");
+        fprintf(stderr,"[INFO] Option -n is set. No actions are performed.\n");
     }
 
     if (flags.t)
     {
         end = clock();
-        clock_gettime(CLOCK_REALTIME, &end_t);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_t);
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("\n\n--------------------- Timing Summary --------------------\n\n");
-        printf("\tTotal CPU Time: %lf seconds.\n\n", cpu_time_used);
-        printf("\tTotal Real Time: %ld micro-seconds(us).", time_diff_in_us(&begin_t, &end_t));
-        printf("\n\n---------------------------------------------------------\n\n");
+        fprintf(stderr,"\n\n--------------------- Timing Summary --------------------\n\n");
+        fprintf(stderr,"\tTotal CPU Time: %lf seconds.\n\n", cpu_time_used);
+        fprintf(stderr,"\tTotal Real Time: %ld micro-seconds(us).", time_diff_in_us(&begin_t, &end_t));
+        fprintf(stderr,"\n\n---------------------------------------------------------\n\n");
     }
 
 

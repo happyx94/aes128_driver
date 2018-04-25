@@ -435,7 +435,6 @@ void AES_CBC_encrypt_buffer(struct AES_ctx *ctx, uint8_t* buf, uint32_t length)
         Cipher((state_t*)buf, ctx->RoundKey);
         Iv = buf;
         buf += AES_BLOCKLEN;
-        //printf("Step %d - %d", i/16, i);
     }
     /* store Iv in ctx for next call */
     memcpy(ctx->Iv, Iv, AES_BLOCKLEN);
@@ -514,7 +513,7 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
 
         if (rev)
         {
-            printf("[INFO] Reverse the byte-order.\n");
+            fprintf(stderr, "[INFO] Reverse the byte-order.\n");
             reverse_blocks(buf, cnt, 16);
         }
 
@@ -528,7 +527,7 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
 
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-        printf("[TIMING] It takes %lf seconds to %scrypt the file.\n", cpu_time_used, dec ? "de" : "en");
+        fprintf(stderr, "[TIMING] It takes %lf seconds to %scrypt the file.\n", cpu_time_used, (dec ? "de" : "en"));
 
         if (rev)
             reverse_blocks(buf, cnt, 16);
