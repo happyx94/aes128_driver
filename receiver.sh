@@ -8,5 +8,5 @@ if test $# != 3; then
     exit 1
 fi
 
-nc -l $1 | ./aes128 -dnr -k $2 -f $3 | gst-launch-1.0 fdsrc ! queue ! decodebin ! autovideosink
+nc -l $1 | ./aes128 -dn -k $2 -f $3 | gst-launch-1.0 fdsrc ! queue ! decodebin ! autovideosink
 

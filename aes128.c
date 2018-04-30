@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
     char *keyfile = NULL; /* char pointer to the password */
     char *infile = NULL;
     char *outfile = NULL;
-    char *buf = psrc;
+    char *buf = NULL;
     clock_t start = 0, end;
     double cpu_time_used;
     struct timespec begin_t, end_t;
@@ -423,6 +423,8 @@ int main(int argc, char *argv[])
                 exit(1);
             }
         }
+        else
+            buf = psrc;
 
         fprintf(stderr,"[INFO] Option -s is set. Use software encryption.\n");
         if (0 != encrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))
@@ -445,6 +447,8 @@ int main(int argc, char *argv[])
                 exit(1);
             }
         }
+        else
+            buf = psrc;
 
         fprintf(stderr,"[INFO] Option -d is set. Use software decryption.\n");
         if (0 != decrypt_file_sw(fdin, fdout, key, iv, buf, flags.r, forced_transfer_len))

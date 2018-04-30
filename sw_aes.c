@@ -169,7 +169,7 @@ static void KeyExpansion(uint8_t* RoundKey, const uint8_t* Key)
                 tempa[0] = tempa[1];
                 tempa[1] = tempa[2];
                 tempa[2] = tempa[3];
-                tempa[3] = k;
+                tempa[3] = (uint8_t) k;
             }
 
             // SubWord() is a function that takes a four-byte input word and 
@@ -271,7 +271,7 @@ static void ShiftRows(state_t* state)
 
 static uint8_t xtime(uint8_t x)
 {
-    return ((x << 1) ^ (((x >> 7) & 1) * 0x1b));
+    return (uint8_t) ((x << 1) ^ (((x >> 7) & 1) * 0x1b));
 }
 
 // MixColumns function mixes the columns of the state matrix
@@ -311,10 +311,10 @@ static void InvMixColumns(state_t* state)
         c = (*state)[i][2];
         d = (*state)[i][3];
 
-        (*state)[i][0] = Multiply(a, 0x0e) ^ Multiply(b, 0x0b) ^ Multiply(c, 0x0d) ^ Multiply(d, 0x09);
-        (*state)[i][1] = Multiply(a, 0x09) ^ Multiply(b, 0x0e) ^ Multiply(c, 0x0b) ^ Multiply(d, 0x0d);
-        (*state)[i][2] = Multiply(a, 0x0d) ^ Multiply(b, 0x09) ^ Multiply(c, 0x0e) ^ Multiply(d, 0x0b);
-        (*state)[i][3] = Multiply(a, 0x0b) ^ Multiply(b, 0x0d) ^ Multiply(c, 0x09) ^ Multiply(d, 0x0e);
+        (*state)[i][0] = (uint8_t) (Multiply(a, 0x0e) ^ Multiply(b, 0x0b) ^ Multiply(c, 0x0d) ^ Multiply(d, 0x09));
+        (*state)[i][1] = (uint8_t) (Multiply(a, 0x09) ^ Multiply(b, 0x0e) ^ Multiply(c, 0x0b) ^ Multiply(d, 0x0d));
+        (*state)[i][2] = (uint8_t) (Multiply(a, 0x0d) ^ Multiply(b, 0x09) ^ Multiply(c, 0x0e) ^ Multiply(d, 0x0b));
+        (*state)[i][3] = (uint8_t) (Multiply(a, 0x0b) ^ Multiply(b, 0x0d) ^ Multiply(c, 0x09) ^ Multiply(d, 0x0e));
     }
 }
 
@@ -492,10 +492,10 @@ static int file_cipher(int fdin, int fdout, void *key, void *iv, void *buf, int 
     {
         if (forced_block_len > 0)
         {
-            size_t n_left = forced_block_len - cnt;
+            int n_left = (int) (forced_block_len - cnt);
             while(n_left > 0)
             {
-                ssize_t n = read(fdin, ((char *)buf) + cnt, n_left);
+                ssize_t n = read(fdin, ((char *)buf) + cnt, (size_t) n_left);
                 n_left -= n;
                 cnt += n;
             }
