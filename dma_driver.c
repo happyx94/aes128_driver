@@ -1,6 +1,11 @@
 /*
-    DMA User space driver.
-*/
+ * File name: dma_driver.c
+ * Version: 1.0
+ * Author: Hsiang-Ju Lai
+ * Description:
+ *  A simple DMA User space that talks to the AXIS_AES128 crypto-accelerator.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

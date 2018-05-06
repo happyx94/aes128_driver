@@ -1,15 +1,19 @@
+/*
+ * File name: aestest.c
+ * Program name: aestest
+ * Version: 1.0
+ * Author: Hsiang-Ju Lai
+ * Description:
+ *  This program is used to test the DMA/AES driver for axis_aes128.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <strings.h>
 
 #include "dma_driver.h"
 
-
-#define TEST_KEY_HH    0x00010203
-#define TEST_KEY_HL    0x04050607
-#define TEST_KEY_LH    0x08090A0B
-#define TEST_KEY_LL    0x0C0D0E0F
 
 #define TEST_VALUE     0x00
 #define TEST_LENGTH    (16 * 5)
@@ -17,16 +21,27 @@
 
 int main(int argc, char *argv[])
 {
-    u32 key[4];
+    char key[16];
 
 
     if (FAILURE == dma_init())
         exit(1);
 
-    key[0] = TEST_KEY_LL;
-    key[1] = TEST_KEY_LH;
-    key[2] = TEST_KEY_HL;
-    key[3] = TEST_KEY_HH;
+    for (int i = 15; i >= 0; i--)
+    {
+        key[i] = i;
+    }
+
+    if (FAILURE == aes_set_iv(key))
+        exit(1);
+ 
+    printf("AES IV: \n");
+    memdump(key, 16);
+
+    for (int i = 0; i < 16; i++)
+    {
+        key[i] = i;
+    }
  
     if (FAILURE == aes_set_key(key))
         exit(1);
@@ -38,7 +53,8 @@ int main(int argc, char *argv[])
     {
         psrc[i] = TEST_VALUE + i;
     }
-    printf("Test values: \n");
+
+    printf("Plaintext: \n");
     memdump(psrc, TEST_LENGTH);
 
     for (int round = 0; round < TEST_ROUNDS; round++)
@@ -51,7 +67,7 @@ int main(int argc, char *argv[])
         if (FAILURE == dma_sync())
             exit(1);
 
-        printf("Result:\n");
+        printf("Ciphertext:\n");
         memdump(pdest, 16);
         printf("\n");
     }
