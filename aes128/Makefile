@@ -20,4 +20,4 @@ $(APP): $(APP_OBJS)
 
 clean:
 	rm -f $(APP_OBJS) $(APP) *.o
-	rm -f $(COMMON_DIR)/*.o
+	rm -f $(COMMON_DIR)/sw_aes.o
