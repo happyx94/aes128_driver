@@ -302,10 +302,11 @@ int aes_set_iv(void *piv)
         return FAILURE;
     }
 
+
     for (int i = 0; i < 4; i++)
     {
         temp[3-i] = pregs[3-i];
-        pregs[3-i] = iv[i];
+        pregs[3-i] = REVERSE_32(iv[i]);
     }
     /* Set the set_IV flag */
     pregs[4] = 0xFFFFFFFF;

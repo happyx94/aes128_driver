@@ -16,7 +16,7 @@
 
 
 #define TEST_VALUE     0x00
-#define TEST_LENGTH    (16 * 5)
+#define TEST_LENGTH    (16 * 6)
 #define TEST_ROUNDS    1
 
 int main(int argc, char *argv[])
@@ -27,9 +27,9 @@ int main(int argc, char *argv[])
     if (FAILURE == dma_init())
         exit(1);
 
-    for (int i = 15; i >= 0; i--)
+    for (int i = 0; i < 16; i++)
     {
-        key[i] = i;
+        key[i] = 0;
     }
 
     if (FAILURE == aes_set_iv(key))
@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < 16; i++)
     {
-        key[i] = i;
+        key[i] = (char) i;
     }
  
     if (FAILURE == aes_set_key(key))
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
             exit(1);
 
         printf("Ciphertext:\n");
-        memdump(pdest, 16);
+        memdump(pdest, TEST_LENGTH);
         printf("\n");
     }
 
