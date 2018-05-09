@@ -1,3 +1,8 @@
+/**
+ *  Author: Hsiang-Ju Lai <happyx94@gmail.com>
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
